@@ -1,0 +1,22 @@
+
+# Python environment
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# API keys and secrets
+.env
+.env.*
+.streamlit/secrets.toml
+
+# ChromaDB generated data
+data/chroma_db/
+
+# Testing and temporary files
+.pytest_cache/
+.coverage
+*.log
+
+# IDE settings
+.vscode/
