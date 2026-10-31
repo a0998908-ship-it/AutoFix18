@@ -1,9 +1,18 @@
 
 import streamlit as st
+import os
 import re
 import time
 from datetime import datetime
 from core.workflow import run_project
+
+# Cloud mode: syntax validation only. Local mode: Docker + unittest.
+CLOUD_MODE = os.getenv("TEST_MODE", "docker").lower() == "cloud"
+
+def status_text(passed):
+    if CLOUD_MODE:
+        return "SYNTAX VALID" if passed else "SYNTAX ERROR"
+    return "PASSED" if passed else "FAILED"
 
 # =====================================================
 # CONFIGURATION
@@ -15,6 +24,9 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+if CLOUD_MODE:
+    st.info("Cloud demo mode: Python syntax is checked without executing code. Unit tests and Docker are available only in the local version.")
 
 # =====================================================
 # DESIGN SYSTEM
@@ -282,21 +294,21 @@ with st.sidebar:
     st.markdown('<div class="nav-label">SYSTEM</div>',
                 unsafe_allow_html=True)
 
-    st.markdown("""
+    st.markdown(f"""
     <div class="sidebar-info">
         <p><span class="status-dot"></span> Application online</p>
         <p>AI Engine: Gemini</p>
         <p>Workflow: LangGraph</p>
-        <p>Execution: Docker sandbox</p>
+        <p>Validation: {"Syntax only" if CLOUD_MODE else "Docker + unittest"}</p>
         <p>Retrieval: ChromaDB</p>
     </div>
     """, unsafe_allow_html=True)
 
-    st.markdown("""
+    st.markdown(f"""
     <div class="sidebar-info">
         <p style="color:white;font-weight:700;">AutoFix</p>
-        <p>AI-assisted software debugging and automated testing.</p>
-        <p>Local development environment</p>
+        <p>AI-assisted software debugging and code validation.</p>
+        <p>{"Cloud demo environment" if CLOUD_MODE else "Local development environment"}</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -354,12 +366,13 @@ if page == "Overview":
         c1, c2, c3, c4 = st.columns(4)
 
         with c1:
-            metric_card("LATEST TEST STATUS",
-                        "PASSED" if passed else "FAILED",
+            metric_card("LATEST VALIDATION STATUS",
+                        status_text(passed),
                         "metric-green" if passed else "metric-red")
 
         with c2:
-            metric_card("TEST CASES EXECUTED", count)
+            metric_card("CHECKS PERFORMED" if CLOUD_MODE else "TEST CASES EXECUTED",
+                        "Syntax" if CLOUD_MODE else count)
 
         with c3:
             metric_card("DEVELOPMENT ATTEMPTS", attempts)
@@ -376,15 +389,16 @@ if page == "Overview":
             datetime.now().strftime("%d %b %Y, %H:%M")
         )
 
-        st.write("**Result:**", "All tests passed" if passed
-                 else "Tests failed or could not complete")
+        st.write("**Result:**", ("Python syntax is valid" if passed else "Python syntax error detected")
+                 if CLOUD_MODE else
+                 ("All tests passed" if passed else "Tests failed or could not complete"))
         st.markdown('</div>', unsafe_allow_html=True)
 
     else:
         c1, c2, c3 = st.columns(3)
 
         with c1:
-            metric_card("TEST EXECUTIONS", "0")
+            metric_card("VALIDATIONS" if CLOUD_MODE else "TEST EXECUTIONS", "0")
 
         with c2:
             metric_card("ACTIVE WORKFLOWS", "0")
@@ -455,7 +469,7 @@ elif page == "Code Debugger":
     with config2:
         st.selectbox(
             "Validation engine",
-            ["Docker + unittest"],
+            ["Syntax validation" if CLOUD_MODE else "Docker + unittest"],
             disabled=True
         )
 
@@ -465,20 +479,20 @@ elif page == "Code Debugger":
 
     with run_col:
         run_button = st.button(
-            "⚡  RUN ANALYSIS & TESTS",
+            "⚡  RUN ANALYSIS & VALIDATE" if CLOUD_MODE else "⚡  RUN ANALYSIS & TESTS",
             use_container_width=True
         )
 
     with clear_col:
-        clear_button = st.button(
-            "Clear inputs",
-            use_container_width=True
-        )
+        def clear_inputs():
+            st.session_state.debug_task = ""
+            st.session_state.debug_code = ""
 
-    if clear_button:
-        st.session_state.debug_task = ""
-        st.session_state.debug_code = ""
-        st.rerun()
+        st.button(
+            "Clear inputs",
+            use_container_width=True,
+            on_click=clear_inputs
+        )
 
     if run_button:
         if not task.strip():
@@ -497,8 +511,11 @@ elif page == "Code Debugger":
                     st.write("Generating execution plan...")
                     st.write("Retrieving relevant code context...")
                     st.write("Generating code improvement...")
-                    st.write("Creating unit tests...")
-                    st.write("Running tests inside Docker sandbox...")
+                    if CLOUD_MODE:
+                        st.write("Checking Python syntax (no code execution)...")
+                    else:
+                        st.write("Creating unit tests...")
+                        st.write("Running tests inside Docker sandbox...")
 
                     result = run_project(
                         task=task,
@@ -541,12 +558,13 @@ elif page == "Code Debugger":
         with c1:
             metric_card(
                 "VALIDATION",
-                "PASSED" if passed else "FAILED",
+                status_text(passed),
                 "metric-green" if passed else "metric-red"
             )
 
         with c2:
-            metric_card("TEST CASES", count)
+            metric_card("SYNTAX CHECK" if CLOUD_MODE else "TEST CASES",
+                            "1" if CLOUD_MODE else count)
 
         with c3:
             metric_card("ATTEMPTS", attempts)
@@ -560,8 +578,8 @@ elif page == "Code Debugger":
             "Execution Plan",
             "Improved Code",
             "AI Explanation",
-            "Unit Tests",
-            "Test Report"
+            "Unit Tests" if not CLOUD_MODE else "Test Availability",
+            "Test Report" if not CLOUD_MODE else "Syntax Report"
         ])
 
         with t1:
@@ -592,10 +610,12 @@ elif page == "Code Debugger":
             )
 
         with t4:
-            st.markdown("### Generated Unit Tests")
+            st.markdown("### Generated Unit Tests" if not CLOUD_MODE else "### Cloud Validation Limitations")
             tests = result.get("generated_tests", "")
 
-            if tests:
+            if CLOUD_MODE:
+                st.info("Unit tests are not generated or executed in cloud mode. Run AutoFix locally with Docker to execute them.")
+            elif tests:
                 st.code(tests, language="python")
 
                 st.download_button(
@@ -609,12 +629,12 @@ elif page == "Code Debugger":
                 st.info("No tests were generated.")
 
         with t5:
-            st.markdown("### Test Execution Output")
+            st.markdown("### Syntax Validation Output" if CLOUD_MODE else "### Test Execution Output")
 
             if passed:
-                st.success("All generated tests passed.")
+                st.success("Python syntax is valid. Unit tests were not executed." if CLOUD_MODE else "All generated tests passed.")
             else:
-                st.error("Tests failed or no tests completed successfully.")
+                st.error("Python syntax validation failed." if CLOUD_MODE else "Tests failed or no tests completed successfully.")
 
             st.code(report if report else "No execution report available.")
 
@@ -647,42 +667,44 @@ elif page == "Test Reports":
         tests = result.get("generated_tests", "")
 
         if passed:
-            st.success("Latest validation: PASSED")
+            st.success(f"Latest validation: {status_text(True)}")
         else:
-            st.error("Latest validation: FAILED")
+            st.error(f"Latest validation: {status_text(False)}")
 
         st.markdown("### Execution summary")
 
         c1, c2, c3 = st.columns(3)
 
         with c1:
-            st.metric("Tests executed", get_test_count(report))
+            st.metric("Validation", "Syntax only" if CLOUD_MODE else f"{get_test_count(report)} tests")
 
         with c2:
             st.metric("Attempts", result.get("attempts", 0))
 
         with c3:
-            st.metric("Status", "Passed" if passed else "Failed")
+            st.metric("Status", status_text(passed))
 
-        st.markdown("### Test output")
+        st.markdown("### Syntax check output" if CLOUD_MODE else "### Test output")
         st.code(report if report else "No report available.")
 
-        st.markdown("### Test suite")
-        st.code(tests if tests else "No generated tests available.",
-                language="python")
+        if CLOUD_MODE:
+            st.info("No unit tests were generated or executed. Use the local Docker version for full testing.")
+        else:
+            st.markdown("### Test suite")
+            st.code(tests if tests else "No generated tests available.",
+                    language="python")
 
 # =====================================================
 # FOOTER
 # =====================================================
 
-st.markdown("""
+st.markdown(f"""
 <div class="footer">
     AUTOFIX ENGINEERING INTELLIGENCE
     <br><br>
     AI-assisted debugging   •
-    Automated validation   •
-    Isolated test execution
+    {"Syntax-only cloud validation" if CLOUD_MODE else "Automated validation   •   Isolated test execution"}
     <br><br>
-    Powered by Python, LangGraph, Gemini, ChromaDB and Docker
+    Powered by Python, LangGraph, Gemini, ChromaDB{"" if CLOUD_MODE else " and Docker"}
 </div>
 """, unsafe_allow_html=True)

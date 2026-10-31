@@ -1,10 +1,14 @@
+import os
 from typing import TypedDict
 from langgraph.graph import StateGraph, START, END
 
 from agents.planner import create_plan
 from agents.code_analyst import index_code, search_code
 from agents.developer import improve_code
-from agents.tester import test_code
+if os.getenv("TEST_MODE", "docker") == "cloud":
+    from agents.cloud_tester import test_code
+else:
+    from agents.tester import test_code
 
 
 class ProjectState(TypedDict):
